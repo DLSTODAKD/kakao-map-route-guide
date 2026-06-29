@@ -1,0 +1,673 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: 삼척버스 Now API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: bus
+    description: Bus plan operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /bus-plan:
+    post:
+      operationId: getBusPlan
+      tags: [bus]
+      summary: Get bus plan
+      description: 자연어 또는 출발지/목적지 입력을 받아 버스 이동 안내를 반환합니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BusPlanInput"
+      responses:
+        "200":
+          description: Bus plan result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BusPlanResult"
+
+  /elderly-message:
+    post:
+      operationId: makeElderlyMessage
+      tags: [bus]
+      summary: Make elderly message
+      description: 버스 플랜 결과를 노인 친화형 메시지로 변환합니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ElderlyMessageInput"
+      responses:
+        "200":
+          description: Elderly message result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElderlyMessageResult"
+
+  /reminder:
+    post:
+      operationId: createDepartureReminder
+      tags: [bus]
+      summary: Create departure reminder
+      description: 출발 30분 전 리마인드 메시지와 권장 발송 시각을 생성합니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReminderInput"
+      responses:
+        "200":
+          description: Reminder result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReminderResult"
+
+  /map/transit-points:
+    get:
+      operationId: getTransitPoints
+      tags: [map]
+      summary: Nearby transit points
+      description: 중심 좌표 주변의 교통 지점(버스정류장/지하철역/기차역/터미널)을 카카오 Local 검색으로 조회합니다.
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: lng
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: radius
+          in: query
+          required: false
+          schema:
+            type: number
+          description: 검색 반경 (m, 기본 1000, 최대 5000)
+        - name: includeBusStops
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: 커스텀 버스정류장 마커 포함 여부 (기본 false — 지도 기본 POI 사용)
+      responses:
+        "200":
+          description: Transit points result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitPointsResult"
+
+  /map/transit-point/{id}/arrivals:
+    get:
+      operationId: getTransitPointArrivals
+      tags: [map]
+      summary: Transit point arrivals
+      description: 교통 지점의 실시간 도착정보 또는 미지원 안내를 반환합니다. 임의 데이터를 만들지 않습니다.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Transit arrivals result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransitArrivalsResult"
+
+  /realtime/bus:
+    get:
+      operationId: getRealtimeBus
+      tags: [map]
+      summary: Realtime bus arrivals by node
+      description: cityCode + nodeId 로 TAGO 실시간 버스 도착정보를 직접 조회합니다.
+      parameters:
+        - name: cityCode
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: nodeId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Realtime bus result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RealtimeBusResult"
+
+  /realtime/nearby-bus-stops:
+    get:
+      operationId: getNearbyBusStops
+      tags: [map]
+      summary: Nearby TAGO bus stops by coordinate
+      description: 지도 클릭 좌표 주변의 TAGO 버스정류장 후보를 조회합니다. 임의 데이터를 만들지 않습니다.
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: lng
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: radius
+          in: query
+          required: false
+          schema:
+            type: number
+          description: 검색 반경 (m, 기본 150, 최대 1000)
+      responses:
+        "200":
+          description: Nearby bus stops result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NearbyBusStopsResult"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    BusPlanInput:
+      type: object
+      properties:
+        query:
+          type: ["string", "null"]
+          description: 자연어 입력 (예. "삼척터미널에서 강원대까지 지금 가려면?")
+        origin:
+          type: ["string", "null"]
+          description: 출발지
+        destination:
+          type: ["string", "null"]
+          description: 목적지
+        time:
+          type: ["string", "null"]
+          description: 출발/도착 시각 (HH:MM 또는 자연어)
+        time_type:
+          type: ["string", "null"]
+          enum: ["departure", "arrival", null]
+          description: 시간 유형
+        user_type:
+          type: ["string", "null"]
+          enum: ["general", "elderly", null]
+          description: 사용자 유형
+        priority:
+          type: ["string", "null"]
+          enum: ["fastest", "easiest", "fewest_transfers", null]
+          description: 경로 우선순위
+
+    PlaceInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: ["string", "null"]
+        road_address:
+          type: ["string", "null"]
+        category:
+          type: ["string", "null"]
+        place_url:
+          type: ["string", "null"]
+        latitude:
+          type: ["number", "null"]
+        longitude:
+          type: ["number", "null"]
+        source:
+          type: string
+        confidence:
+          type: ["string", "null"]
+        score:
+          type: ["number", "null"]
+        score_reason:
+          type: ["string", "null"]
+      required:
+        - name
+        - source
+
+    RouteOption:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: ["publictransit", "car", "bicycle", "foot"]
+        mode_label:
+          type: string
+        kakao_map_route_url:
+          type: ["string", "null"]
+        kakao_map_app_url:
+          type: ["string", "null"]
+        route_link_available:
+          type: boolean
+      required:
+        - mode
+        - mode_label
+        - route_link_available
+
+    ParsedRouteQuery:
+      type: object
+      properties:
+        original_query:
+          type: string
+        cleaned_query:
+          type: string
+        detected_mode:
+          type: ["string", "null"]
+          enum: ["publictransit", "car", "bicycle", "foot", null]
+        selected_modes:
+          type: array
+          items:
+            type: string
+        default_mode_used:
+          type: boolean
+        origin_text:
+          type: ["string", "null"]
+        destination_text:
+          type: ["string", "null"]
+        parse_confidence:
+          type: string
+          enum: ["high", "medium", "low"]
+        parse_error:
+          type: ["string", "null"]
+      required:
+        - original_query
+        - cleaned_query
+        - selected_modes
+        - default_mode_used
+        - parse_confidence
+
+    BusPlanResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        needs_clarification:
+          type: boolean
+        clarification_question:
+          type: ["string", "null"]
+        data_source:
+          type: string
+        provider:
+          type: string
+        is_mock_data:
+          type: boolean
+        service_name:
+          type: string
+        bus_detail_available:
+          type: boolean
+        default_mode_used:
+          type: boolean
+        selected_modes:
+          type: array
+          items:
+            type: string
+            enum: ["publictransit", "car", "bicycle", "foot"]
+        origin:
+          type: ["string", "null"]
+        destination:
+          type: ["string", "null"]
+        origin_place:
+          $ref: "#/components/schemas/PlaceInfo"
+          nullable: true
+        destination_place:
+          $ref: "#/components/schemas/PlaceInfo"
+          nullable: true
+        route_options:
+          type: array
+          items:
+            $ref: "#/components/schemas/RouteOption"
+        kakao_map_route_url:
+          type: ["string", "null"]
+        kakao_map_app_url:
+          type: ["string", "null"]
+        route_link_available:
+          type: boolean
+        route_link_type:
+          type: ["string", "null"]
+        parsed:
+          $ref: "#/components/schemas/ParsedRouteQuery"
+          nullable: true
+        origin_candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlaceInfo"
+        destination_candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlaceInfo"
+        departure_stop:
+          type: ["string", "null"]
+        arrival_stop:
+          type: ["string", "null"]
+        bus_number:
+          type: ["string", "null"]
+        direction:
+          type: ["string", "null"]
+        scheduled_bus_departure_time:
+          type: ["string", "null"]
+        recommended_departure_time:
+          type: ["string", "null"]
+        estimated_arrival_time:
+          type: ["string", "null"]
+        reminder_time:
+          type: ["string", "null"]
+        walk_time_to_stop_minutes:
+          type: ["number", "null"]
+        wait_time_minutes:
+          type: ["number", "null"]
+        ride_time_minutes:
+          type: ["number", "null"]
+        walk_time_to_destination_minutes:
+          type: ["number", "null"]
+        transfer_count:
+          type: ["integer", "null"]
+        safety_buffer_minutes:
+          type: ["number", "null"]
+        total_time_min:
+          type: ["number", "null"]
+        total_time_max:
+          type: ["number", "null"]
+        confidence:
+          type: ["string", "null"]
+        message_for_kakao:
+          type: string
+        warning:
+          type: ["string", "null"]
+      required:
+        - success
+        - needs_clarification
+        - data_source
+        - provider
+        - is_mock_data
+        - service_name
+        - bus_detail_available
+        - default_mode_used
+        - selected_modes
+        - route_options
+        - route_link_available
+        - message_for_kakao
+
+    ElderlyMessageInput:
+      type: object
+      properties:
+        bus_plan:
+          $ref: "#/components/schemas/BusPlanResult"
+        elderly_name:
+          type: ["string", "null"]
+        reminder_minutes:
+          type: ["integer", "null"]
+      required:
+        - bus_plan
+
+    ElderlyMessageResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        simple_message:
+          type: string
+        reminder_message:
+          type: string
+      required:
+        - success
+        - simple_message
+        - reminder_message
+
+    ReminderInput:
+      type: object
+      properties:
+        bus_plan:
+          $ref: "#/components/schemas/BusPlanResult"
+        reminder_minutes:
+          type: ["integer", "null"]
+      required:
+        - bus_plan
+
+    ReminderResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        reminder_time:
+          type: string
+        reminder_message:
+          type: string
+      required:
+        - success
+        - reminder_time
+        - reminder_message
+
+    TransitPoint:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: ["bus_stop", "subway", "rail", "terminal"]
+        name:
+          type: string
+        address:
+          type: ["string", "null"]
+        category:
+          type: ["string", "null"]
+        latitude:
+          type: number
+        longitude:
+          type: number
+        place_url:
+          type: ["string", "null"]
+        distance_meters:
+          type: number
+        source:
+          type: string
+      required:
+        - id
+        - type
+        - name
+        - latitude
+        - longitude
+        - distance_meters
+        - source
+
+    TransitPointsResult:
+      type: object
+      properties:
+        kakao_active:
+          type: boolean
+        center:
+          type: object
+          properties:
+            lat:
+              type: number
+            lng:
+              type: number
+        radius:
+          type: ["number", "null"]
+        count:
+          type: integer
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransitPoint"
+        message:
+          type: ["string", "null"]
+      required:
+        - kakao_active
+        - count
+        - points
+
+    BusArrival:
+      type: object
+      properties:
+        route_id:
+          type: string
+        route_number:
+          type: string
+        arrival_time_minutes:
+          type: number
+        remaining_stops:
+          type: number
+        direction:
+          type: string
+        route_type:
+          type: ["string", "null"]
+      required:
+        - route_id
+        - route_number
+        - arrival_time_minutes
+        - remaining_stops
+        - direction
+
+    TransitArrivalsResult:
+      type: object
+      properties:
+        available:
+          type: boolean
+        type:
+          type: string
+          enum: ["bus_stop", "subway", "rail", "terminal"]
+        name:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        arrivals:
+          type: array
+          items:
+            $ref: "#/components/schemas/BusArrival"
+        city_code:
+          type: ["string", "null"]
+        node_id:
+          type: ["string", "null"]
+        kakao_map_url:
+          type: ["string", "null"]
+        message:
+          type: string
+        data_source:
+          type: string
+      required:
+        - available
+        - type
+        - name
+        - latitude
+        - longitude
+        - arrivals
+        - message
+        - data_source
+
+    RealtimeBusResult:
+      type: object
+      properties:
+        available:
+          type: boolean
+        city_code:
+          type: ["string", "null"]
+        node_id:
+          type: ["string", "null"]
+        count:
+          type: ["integer", "null"]
+        arrivals:
+          type: array
+          items:
+            $ref: "#/components/schemas/BusArrival"
+        message:
+          type: string
+      required:
+        - available
+        - arrivals
+        - message
+
+    NearbyBusStop:
+      type: object
+      properties:
+        name:
+          type: string
+        node_id:
+          type: string
+        city_code:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        distance_meters:
+          type: number
+      required:
+        - name
+        - node_id
+        - city_code
+        - latitude
+        - longitude
+        - distance_meters
+
+    NearbyBusStopsResult:
+      type: object
+      properties:
+        available:
+          type: boolean
+        center:
+          type: object
+          properties:
+            lat:
+              type: number
+            lng:
+              type: number
+        radius:
+          type: ["number", "null"]
+        count:
+          type: integer
+        stops:
+          type: array
+          items:
+            $ref: "#/components/schemas/NearbyBusStop"
+        message:
+          type: string
+      required:
+        - available
+        - count
+        - stops
+        - message
